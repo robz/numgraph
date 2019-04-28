@@ -1,0 +1,123 @@
+#!/usr/local/bin/python3
+# Small utility to graph integers from stdin
+# examples:
+# seq 5 10 | numgraph --xaxis_mode count
+# ping google.com | grep 'bytes from' --line-buffered | perl -pe 's/.+time=(\d+).+/\1/g,$|=1' | numgraph --title 'ping google.com' --yaxis_title 'response time (ms)'
+# see https://stackoverflow.com/questions/47612449/nothing-prints-after-piping-ping-through-two-commands
+# for why "--line-buffered" and ",$|=1" are necessary,
+# and why "sys.stdout.flush()" is called below
+
+
+import sys
+import matplotlib
+
+# https://stackoverflow.com/questions/44278369/how-to-keep-matplotlib-python-window-in-background
+matplotlib.use("TkAgg")
+import matplotlib.pyplot as plt
+import time
+import argparse
+
+
+def get_args_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--limit", default=-1, type=int)
+    parser.add_argument(
+        "--xaxis_mode", default="count", type=str, choices=["time", "count"]
+    )
+    parser.add_argument("--title", default="", type=str)
+    parser.add_argument("--xaxis_title", default="", type=str)
+    parser.add_argument("--yaxis_title", default="value", type=str)
+    parser.add_argument("--silent", action="store_true")
+    # throttles to about 23 lines/s without buffering
+    # with buffering, it consumes 161290/s (probably not throttling)
+    # TODO: add argument to target consumption speed or fps
+    parser.add_argument("--buffer", action="store_true")
+    parser.add_argument("--no_pass_through", action="store_true")
+    return parser
+
+
+def init_graph(title, xaxis_title, yaxis_title):
+    plt.ion()
+    fig = plt.figure()
+    ax = plt.subplot(1, 1, 1)
+    ax.set_title(title)
+    ax.set_xlabel(xaxis_title)
+    ax.set_ylabel(yaxis_title)
+    ax.plot([], [])
+
+    # push pyplot window in front of other windows
+    fig.canvas.flush_events()
+    fig.show()
+
+    return (ax, fig)
+
+
+def draw_graph(graph, xs, ys):
+    ax, fig = graph
+    ax.lines[0].set_data(xs, ys)
+    ax.relim()  # recompute the data limits
+    ax.autoscale_view()  # automatic axis scaling
+    fig.canvas.flush_events()
+    time.sleep(0)
+
+
+def to_int(line):
+    value = None
+    try:
+        value = int(line)
+    except ValueError:
+        pass
+    return value
+
+
+def main(args):
+    if not args.silent:
+        print(args)
+
+    graph = init_graph(
+        args.title,
+        args.xaxis_mode if args.xaxis_title == "" else args.xaxis_title,
+        args.yaxis_title,
+    )
+
+    xs = []
+    ys = []
+    start_time = time.time()
+    count = 0
+
+    # continuously read lines from stdin
+    for line in sys.stdin:
+        line = line.rstrip()
+        if not args.no_pass_through:
+            print(line)
+            # flush buffer in case stdout isn't being captured by a terminal
+        sys.stdout.flush()
+        y = to_int(line)
+        if y == None:
+            if not args.silent:
+                print("^ skipping this because it cannot be converted to an int")
+            continue
+
+        xs.append(time.time() - start_time if args.xaxis_mode == "time" else count)
+        ys.append(y)
+        count += 1
+
+        if not args.buffer:
+            draw_graph(graph, xs, ys)
+
+        if args.limit != -1 and count >= args.limit:
+            break
+
+    if not args.silent:
+        print(
+            "reached limit"
+            if args.limit != -1 and count < args.limit
+            else "end of file"
+        )
+
+    # continue to render after receiving EOF character or reaching limit
+    while True:
+        draw_graph(graph, xs, ys)
+
+
+main(get_args_parser().parse_args())
