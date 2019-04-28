@@ -1,7 +1,7 @@
 #!/usr/local/bin/python3
 # Small utility to graph integers from stdin
 # examples:
-# seq 5 10 | numgraph --xaxis_mode count
+# seq 5 10 | numgraph
 # ping google.com | grep 'bytes from' --line-buffered | perl -pe 's/.+time=(\d+).+/\1/g,$|=1' | numgraph --title 'ping google.com' --yaxis_title 'response time (ms)'
 # see https://stackoverflow.com/questions/47612449/nothing-prints-after-piping-ping-through-two-commands
 # for why "--line-buffered" and ",$|=1" are necessary,
